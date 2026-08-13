@@ -19,7 +19,7 @@ extension surfaces. They share one backend namespace: `/api/plugins/llm-quota/`.
 ### Backend and web dashboard
 
 ```bash
-hermes plugins install OWNER/REPO
+hermes plugins install bnogalski/hermes-llm-quota
 hermes plugins enable llm-quota
 ```
 

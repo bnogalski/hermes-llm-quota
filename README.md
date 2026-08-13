@@ -1,62 +1,89 @@
 # Hermes LLM Quota Monitor
 
-Live token quota and usage monitor for [Hermes Agent](https://github.com/NousResearch/hermes-agent).
+A standalone plugin for [Hermes Agent](https://github.com/NousResearch/hermes-agent).
+It shows live quota and usage for the providers configured on the Hermes host:
 
-Shows remaining allowance for:
+- **Z.AI** coding plan via `ZAI_API_KEY` or `GLM_API_KEY`
+- **OpenAI Codex** via the Hermes `openai-codex` auth store
+- **Grok** via the Hermes `xai-oauth` auth store
+- **OpenRouter** credits via `OPENROUTER_API_KEY`
 
-- **Z.AI** coding plan (`ZAI_API_KEY` / `GLM_API_KEY`)
-- **OpenAI Codex** (Hermes `openai-codex` auth store)
-- **Grok** (Hermes `xai-oauth` auth store)
-- **OpenRouter** credits (`OPENROUTER_API_KEY`)
+The backend returns no secrets or account email. Provider failures remain visible
+as explicit states: `no_key`, `no_token`, `expired`, `forbidden`, or `error`.
 
-The backend never returns secrets or account email. Error states (`no_key`, `no_token`, `expired`, `forbidden`, `error`) are shown in the pane instead of being hidden.
+## Installation
 
-## Install
+The web dashboard plugin and the native desktop plugin are separate Hermes
+extension surfaces. They share one backend namespace: `/api/plugins/llm-quota/`.
+
+### Backend and web dashboard
 
 ```bash
-hermes plugins install bnogalski/hermes-llm-quota
+hermes plugins install OWNER/REPO
 hermes plugins enable llm-quota
 ```
 
-`register()` copies `desktop/plugin.js` into `$HERMES_HOME/desktop-plugins/llm-quota/`. Reload desktop plugins (`Ctrl+K` → Reload desktop plugins) if the pane does not appear.
+The API is mounted at `/api/plugins/llm-quota/`. Restart the dashboard or gateway
+process when the installed plugin is not picked up. The backend must be enabled
+in `plugins.enabled` for its API routes to mount.
 
-Manual copy (if you do not use `hermes plugins install`):
+### Native desktop pane
+
+From the repository root, copy the canonical disk plugin file without renaming
+its directory or id:
 
 ```bash
-cp -r . ~/.hermes/plugins/llm-quota
-cp desktop/plugin.js ~/.hermes/desktop-plugins/llm-quota/plugin.js
+mkdir -p "$HERMES_HOME/desktop-plugins/llm-quota"
+cp desktop/llm-quota/plugin.js "$HERMES_HOME/desktop-plugins/llm-quota/plugin.js"
 ```
 
-On Windows, `$HERMES_HOME` is typically `%LOCALAPPDATA%\hermes`.
+On Windows, use the equivalent `%HERMES_HOME%\\desktop-plugins\\llm-quota\\plugin.js`
+path. If `HERMES_HOME` is not set, Hermes normally uses the profile home under
+`%LOCALAPPDATA%\\hermes`.
+
+Reload desktop plugins from the desktop command palette. The plugin registers a
+right-side quota pane, a status-bar chip, a desktop route, and sidebar navigation.
+The desktop ID is `llm-quota`, matching the backend namespace, so `ctx.rest('/all')`
+is the official scoped API door.
 
 ## Requirements
 
-- Hermes Agent with the desktop app (for the pane / status-bar chip)
-- Provider credentials already configured in Hermes:
-  - Z.AI / OpenRouter: env vars
-  - Codex / Grok: `hermes auth` OAuth stores
-
-The dashboard process must have the plugin in `plugins.enabled` or the Python API will not mount (`/api/plugins/llm-quota/all`).
+- Hermes Agent with the web dashboard for the backend and dashboard tab
+- Hermes Desktop for the native pane and status-bar chip
+- Credentials configured for at least one provider
+- The dashboard plugin enabled in Hermes configuration
 
 ## Layout
 
-```
-plugin.yaml                 # hermes plugins install manifest
-__init__.py                 # copies the desktop pane on enable
+```text
+plugin.yaml
+__init__.py                       # side-effect-free Python entrypoint
 dashboard/
-  manifest.json             # dashboard tab + API mount
-  plugin_api.py             # FastAPI router
+  manifest.json                   # dashboard tab and backend declaration
+  dist/index.js                   # official dashboard IIFE entry
+  plugin_api.py                   # FastAPI router
 desktop/
-  plugin.js                 # Electron pane + status-bar chip
+  llm-quota/plugin.js             # native desktop disk plugin
 tests/
 ```
 
-## Develop
+The Python entrypoint does not copy files into another Hermes directory. Hermes
+loads the dashboard backend from its manifest, while the desktop app loads the
+ESM file from `desktop-plugins/llm-quota/`.
+
+## Development
 
 ```bash
 python -m pytest tests -q
 ```
 
+The tests do not call provider APIs. Validate the two JavaScript entry files with
+Acorn before distributing a change:
+
+```bash
+node -e "const fs=require('fs'), acorn=require('acorn'); for (const f of ['dashboard/dist/index.js','desktop/llm-quota/plugin.js']) acorn.parse(fs.readFileSync(f,'utf8'), {ecmaVersion:2022, sourceType: f.includes('/desktop/') ? 'module' : 'script'}); console.log('JS syntax OK')"
+```
+
 ## License
 
-MIT — Bartosz Nogalski
+MIT, Copyright (c) 2026 Bartosz Nogalski

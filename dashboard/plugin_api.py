@@ -1,4 +1,4 @@
-"""LLM Quota Monitor — backend API routes.
+"""LLM Quota Monitor - backend API routes.
 
 Mounted at /api/plugins/llm-quota/ by the dashboard plugin system.
 
@@ -6,7 +6,7 @@ Queries quota/usage endpoints for Z.AI coding plan, OpenAI Codex (ChatGPT),
 Grok OAuth subscription billing, and OpenRouter. Returns unified JSON consumed
 by the desktop plugin UI.
 
-No secrets or PII are logged or exposed — only usage percentages, plan labels,
+No secrets or PII are logged or exposed - only usage percentages, plan labels,
 and reset times.
 """
 

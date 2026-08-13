@@ -192,23 +192,27 @@ function QuotaChip() {
   const names = Object.keys(providers)
   if (!query.isLoading && names.length === 0 && !query.isError) return null
 
+  // When the query itself errors, ignore stale cached data — show the error.
   let lowest = null
   let lowestPct = 100
   let hasProblem = query.isError
-  names.forEach(name => {
-    const provider = providers[name]
-    if (!provider) return
-    if (!isOk(provider)) {
-      if (!['no_key', 'no_token'].includes(statusOf(provider))) hasProblem = true
-      return
-    }
-    ;(provider.windows || []).forEach(window => {
-      const remaining = remainingPct(window)
-      if (remaining < lowestPct) { lowestPct = remaining; lowest = name }
-    })
-  })
 
-  const color = hasProblem && lowest == null ? 'var(--ui-warning, #f59e0b)' : pctColor(lowestPct)
+  if (!query.isError) {
+    names.forEach(name => {
+      const provider = providers[name]
+      if (!provider) return
+      if (!isOk(provider)) {
+        if (!['no_key', 'no_token'].includes(statusOf(provider))) hasProblem = true
+        return
+      }
+      ;(provider.windows || []).forEach(window => {
+        const remaining = remainingPct(window)
+        if (remaining < lowestPct) { lowestPct = remaining; lowest = name }
+      })
+    })
+  }
+
+  const color = hasProblem ? 'var(--ui-warning, #f59e0b)' : pctColor(lowestPct)
   const chipLabel = lowest ? (PROVIDERS[lowest] || {}).chip : (hasProblem ? '!' : '...')
   return jsx(Tip, {
     label: lowest

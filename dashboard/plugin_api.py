@@ -16,6 +16,7 @@ import asyncio
 import base64
 import json
 import logging
+import math
 import os
 import re
 import time
@@ -95,6 +96,15 @@ def _number(value: Any) -> float | None:
         return float(value)
     except (TypeError, ValueError):
         return None
+
+
+def _safe_finite(value: Any, default: float = 0.0) -> float:
+    """Coerce to float, returning *default* for None/NaN/Inf/non-numeric."""
+    try:
+        f = float(value)
+    except (TypeError, ValueError):
+        return default
+    return f if math.isfinite(f) else default
 
 
 def _safe_error(exc: BaseException) -> str:
@@ -570,16 +580,39 @@ def _resolve_nous_access_token() -> str:
         return ""
 
 
+_DEFAULT_NOUS_PORTAL_URL = "https://portal.nousresearch.com"
+
+
 def _nous_portal_base_url() -> str:
-    """Return the portal base URL from auth state (fallback: default)."""
+    """Return the validated portal base URL from auth state.
+
+    A poisoned ``portal_base_url`` must not exfiltrate the bearer token to
+    an untrusted host, so the host is validated against the same allowlist
+    core Hermes uses (``_NOUS_PORTAL_ALLOWED_HOSTS``).  Falls back to the
+    default on any mismatch or import error.
+    """
     try:
-        from hermes_cli.auth import get_provider_auth_state
+        from hermes_cli.auth import _NOUS_PORTAL_ALLOWED_HOSTS, get_provider_auth_state
+        from urllib.parse import urlparse
 
         state = get_provider_auth_state("nous") or {}
         url = state.get("portal_base_url")
-        return url.strip() if isinstance(url, str) and url.strip() else "https://portal.nousresearch.com"
+        if not isinstance(url, str) or not url.strip():
+            return _DEFAULT_NOUS_PORTAL_URL
+        url = url.strip()
+        parsed = urlparse(url)
+        host = parsed.hostname
+        loopback_http = parsed.scheme == "http" and host in {"localhost", "127.0.0.1"}
+        if (
+            not host
+            or host not in _NOUS_PORTAL_ALLOWED_HOSTS
+            or not (parsed.scheme == "https" or loopback_http)
+        ):
+            log.warning("ignoring invalid portal_base_url %r, using default", url)
+            return _DEFAULT_NOUS_PORTAL_URL
+        return url.rstrip("/")
     except Exception:
-        return "https://portal.nousresearch.com"
+        return _DEFAULT_NOUS_PORTAL_URL
 
 
 async def _fetch_nous_credits(client: httpx.AsyncClient) -> dict[str, Any]:
@@ -735,10 +768,12 @@ async def _fetch_openrouter_credits(client: httpx.AsyncClient, api_key: str) -> 
         payload = resp.json()
         payload = payload if isinstance(payload, dict) else {}
         data = payload.get("data") if isinstance(payload.get("data"), dict) else {}
-        total = float(data.get("total_credits", 0) or 0)
-        usage = float(data.get("total_usage", 0) or 0)
+        total = _safe_finite(data.get("total_credits"))
+        usage = _safe_finite(data.get("total_usage"))
         remaining = round(total - usage, 2)
         remaining_pct = round((remaining / total) * 100, 1) if total > 0 else 0.0
+        remaining_pct = max(0.0, min(100.0, remaining_pct)) if total > 0 else 0.0
+        used_pct = max(0.0, min(100.0, round(100 - remaining_pct, 1))) if total > 0 else 0.0
         return {
             "provider": "openrouter",
             "status": "ok",
@@ -748,7 +783,7 @@ async def _fetch_openrouter_credits(client: httpx.AsyncClient, api_key: str) -> 
                 "limit": total,
                 "used": usage,
                 "remaining": remaining,
-                "percentage_used": round(100 - remaining_pct, 1) if total > 0 else 0.0,
+                "percentage_used": used_pct,
                 "percentage_remaining": remaining_pct,
                 "amount_unit": "USD",
             }],

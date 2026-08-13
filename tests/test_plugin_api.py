@@ -105,3 +105,122 @@ async def test_get_all_quotas_survives_missing_keys(monkeypatch):
     assert result["providers"]["codex"]["status"] == "no_token"
     assert result["providers"]["grok"]["status"] == "no_token"
     assert "email" not in json.dumps(result)
+
+
+# ---------------------------------------------------------------------------
+# Regression tests: SSRF protection in _nous_portal_base_url
+# ---------------------------------------------------------------------------
+
+import hermes_cli.auth as core_auth
+
+
+def test_nous_portal_base_url_rejects_poisoned_host(monkeypatch):
+    """A poisoned portal_base_url must fall back to the default URL."""
+    monkeypatch.setattr(
+        core_auth, "get_provider_auth_state",
+        lambda provider: {"portal_base_url": "https://attacker.invalid/base"},
+    )
+    result = api._nous_portal_base_url()
+    assert result == "https://portal.nousresearch.com"
+    assert "attacker.invalid" not in result
+
+
+def test_nous_portal_base_url_accepts_valid_host(monkeypatch):
+    """A valid portal host from the allowlist passes through."""
+    monkeypatch.setattr(
+        core_auth, "get_provider_auth_state",
+        lambda provider: {"portal_base_url": "https://portal.nousresearch.com/some/path"},
+    )
+    result = api._nous_portal_base_url()
+    assert result == "https://portal.nousresearch.com/some/path"
+
+
+def test_nous_portal_base_url_accepts_loopback_http(monkeypatch):
+    """Loopback http URLs are allowed for local dev/testing."""
+    monkeypatch.setattr(
+        core_auth, "get_provider_auth_state",
+        lambda provider: {"portal_base_url": "http://127.0.0.1:8080/test"},
+    )
+    result = api._nous_portal_base_url()
+    assert result == "http://127.0.0.1:8080/test"
+
+
+def test_nous_portal_base_url_rejects_http_non_loopback(monkeypatch):
+    """Plain http to a non-loopback host is rejected even if in allowlist."""
+    monkeypatch.setattr(
+        core_auth, "get_provider_auth_state",
+        lambda provider: {"portal_base_url": "http://portal.nousresearch.com/"},
+    )
+    result = api._nous_portal_base_url()
+    assert result == "https://portal.nousresearch.com"
+
+
+# ---------------------------------------------------------------------------
+# Regression tests: NaN/Infinity handling in _fetch_openrouter_credits
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_openrouter_nan_credits_does_not_crash():
+    """NaN/Infinity from the API must not crash JSON serialization."""
+    class FakeClient:
+        async def get(self, url, **kwargs):
+            return httpx.Response(
+                200,
+                request=httpx.Request("GET", url),
+                json={"data": {"total_credits": "NaN", "total_usage": 1}},
+            )
+    result = await api._fetch_openrouter_credits(FakeClient(), "fake-key")
+    serialized = json.dumps(result)  # must not raise ValueError
+    assert result["status"] == "ok"
+    w = result["windows"][0]
+    # NaN should be sanitized to a finite value (0.0 after _safe_finite),
+    # so limit equals itself (not NaN).
+    assert w["limit"] == w["limit"]
+
+
+@pytest.mark.asyncio
+async def test_openrouter_infinity_usage_clamped():
+    """Infinity usage must be clamped, not produce Infinity in the response."""
+    class FakeClient:
+        async def get(self, url, **kwargs):
+            return httpx.Response(
+                200,
+                request=httpx.Request("GET", url),
+                json={"data": {"total_credits": 10, "total_usage": "Infinity"}},
+            )
+    result = await api._fetch_openrouter_credits(FakeClient(), "fake-key")
+    serialized = json.dumps(result)  # must not raise ValueError
+    assert result["status"] == "ok"
+    w = result["windows"][0]
+    assert w["percentage_remaining"] >= 0
+    assert w["percentage_used"] <= 100
+
+
+@pytest.mark.asyncio
+async def test_openrouter_overage_clamped_to_zero():
+    """When usage > total, percentage_remaining must be clamped to 0 (not negative)."""
+    class FakeClient:
+        async def get(self, url, **kwargs):
+            return httpx.Response(
+                200,
+                request=httpx.Request("GET", url),
+                json={"data": {"total_credits": 10, "total_usage": 15}},
+            )
+    result = await api._fetch_openrouter_credits(FakeClient(), "fake-key")
+    w = result["windows"][0]
+    assert w["percentage_remaining"] == 0.0
+    assert w["percentage_used"] == 100.0
+
+
+# ---------------------------------------------------------------------------
+# Regression tests: _safe_finite helper
+# ---------------------------------------------------------------------------
+
+
+def test_safe_finite_rejects_nan_inf():
+    assert api._safe_finite("NaN") == 0.0
+    assert api._safe_finite("Infinity") == 0.0
+    assert api._safe_finite(None) == 0.0
+    assert api._safe_finite(42) == 42.0
+    assert api._safe_finite("3.14") == 3.14

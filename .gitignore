@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+*.egg-info/
+
+# Graphify
+graphify-out/
+.graphify_cache/
+
+# Runtime state
+state.json
+scan_snapshot.json
+scan_checkpoint.json
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+.pytest_cache/
+__pycache__/

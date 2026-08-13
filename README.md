@@ -84,6 +84,16 @@ Acorn before distributing a change:
 node -e "const fs=require('fs'), acorn=require('acorn'); for (const f of ['dashboard/dist/index.js','desktop/llm-quota/plugin.js']) acorn.parse(fs.readFileSync(f,'utf8'), {ecmaVersion:2022, sourceType: f.includes('/desktop/') ? 'module' : 'script'}); console.log('JS syntax OK')"
 ```
 
+## Support
+
+If this plugin saved you some time, a tip is always appreciated.
+
+**BTC (Bech32):**
+
+```
+bc1q4refcfue5dvatkx96e3xv7xr6pde24u20nvjfv
+```
+
 ## License
 
 MIT, Copyright (c) 2026 Bartosz Nogalski

@@ -1,7 +1,7 @@
 {
   "name": "llm-quota",
   "label": "Quota Monitor",
-  "description": "Live token quota and usage monitor for Z.AI coding plan, OpenAI Codex, Grok OAuth subscription, and OpenRouter.",
+  "description": "Live token quota and usage monitor for Z.AI, OpenAI Codex, Grok, Nous Portal, and OpenRouter.",
   "icon": "BarChart3",
   "version": "1.2.0",
   "tab": {

@@ -1,4 +1,4 @@
 name: llm-quota
 version: "1.2.0"
-description: Live token quota and usage monitor for Z.AI, OpenAI Codex, Grok OAuth, and OpenRouter.
+description: Live token quota and usage monitor for Z.AI, OpenAI Codex, Grok, Nous Portal, and OpenRouter.
 author: Bartosz Nogalski

@@ -6,7 +6,7 @@ A standalone plugin for [Hermes Agent](https://github.com/NousResearch/hermes-ag
 
 <br>
 
-<img src="assets/quota-monitor-screenshot.png" width="280" alt="LLM Quota Monitor — live provider quotas on mobile dashboard">
+<img src="assets/quota-monitor-screenshot.png" width="280" alt="LLM Quota Monitor: live provider quotas on mobile dashboard">
 
 <br>
 
@@ -29,16 +29,18 @@ A standalone plugin for [Hermes Agent](https://github.com/NousResearch/hermes-ag
 | **[Nous Research Portal](https://portal.nousresearch.com)** | Hermes `nous` OAuth (Portal subscription) | USD balance (subscription + purchased credits) |
 | **[OpenRouter](https://openrouter.ai)** | `OPENROUTER_API_KEY` | USD credits (total / usage) |
 
-Each provider returns explicit status states: `ok`, `no_key`, `no_token`, `expired`, `forbidden`, or `error` — no silent failures.
+> **Need another provider?** Open an [issue](https://github.com/bnogalski/hermes-llm-quota/issues) or ask your Hermes Agent to add it. The provider architecture is modular: each provider is an independent async fetch function returning a unified window dict, so new endpoints can be added in a few dozen lines.
+
+Each provider returns explicit status states: `ok`, `no_key`, `no_token`, `expired`, `forbidden`, or `error`. No silent failures.
 
 ## 🎯 Features
 
-- **Dual-surface UI** — web dashboard tab + native desktop pane with status-bar chip
-- **Real-time monitoring** — auto-refresh every 60s with manual refresh button
-- **Multi-window quotas** — providers with multiple limits (Z.AI daily/rolling/weekly) each get their own progress bar
-- **Visual indicators** — color-coded progress bars (blue = healthy, orange = warning, red = critical)
-- **Zero secret exposure** — backend returns only percentages, plan labels, and reset times; no API keys, tokens, or account emails
-- **SSRF-hardened** — portal base URLs validated against an allowlist before any authenticated request
+- **Dual-surface UI**: web dashboard tab + native desktop pane with status-bar chip
+- **Real-time monitoring**: auto-refresh every 60s with manual refresh button
+- **Multi-window quotas**: providers with multiple limits (Z.AI daily/rolling/weekly) each get their own progress bar
+- **Visual indicators**: color-coded progress bars (blue = healthy, orange = warning, red = critical)
+- **Zero secret exposure**: backend returns only percentages, plan labels, and reset times. No API keys, tokens, or account emails.
+- **SSRF-hardened**: portal base URLs validated against an allowlist before any authenticated request
 
 ## 📦 Installation
 
@@ -63,7 +65,7 @@ cp desktop/llm-quota/plugin.js "$HERMES_HOME/desktop-plugins/llm-quota/plugin.js
 > **Windows:** use `%HERMES_HOME%\desktop-plugins\llm-quota\plugin.js`.
 > If `HERMES_HOME` is not set, Hermes uses `%LOCALAPPDATA%\hermes`.
 
-Reload desktop plugins via **⌘K → Reload desktop plugins**. The plugin registers:
+Reload desktop plugins via the command palette (**Ctrl+K** or **Cmd+K**). The plugin registers:
 - A **right-side quota pane**
 - A **status-bar chip** (color-coded by lowest remaining %)
 - A **desktop route** at `/llm-quota`
@@ -109,10 +111,10 @@ node --check dashboard/dist/index.js
 
 ## 🔒 Security
 
-- **No secrets in responses** — provider API responses are filtered to usage data only
-- **SSRF protection** — `portal_base_url` is validated against `_NOUS_PORTAL_ALLOWED_HOSTS` before any authenticated request (same allowlist core Hermes uses)
-- **NaN/Infinity hardening** — provider responses with non-finite numeric values are sanitized to prevent JSON serialization crashes
-- **Bearer token redaction** — error messages strip bearer tokens before logging
+- **No secrets in responses**: provider API responses are filtered to usage data only
+- **SSRF protection**: `portal_base_url` is validated against `_NOUS_PORTAL_ALLOWED_HOSTS` before any authenticated request (same allowlist core Hermes uses)
+- **NaN/Infinity hardening**: provider responses with non-finite numeric values are sanitized to prevent JSON serialization crashes
+- **Bearer token redaction**: error messages strip bearer tokens before logging
 
 ## ❤️ Support
 

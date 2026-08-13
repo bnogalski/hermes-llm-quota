@@ -14,8 +14,9 @@
 
   const API = "/api/plugins/llm-quota";
   const REFETCH_MS = 60000;
-  const PROVIDER_ORDER = ["zai", "codex", "grok", "openrouter"];
+  const PROVIDER_ORDER = ["nous", "zai", "codex", "grok", "openrouter"];
   const PROVIDERS = {
+    nous: "Nous Portal",
     zai: "Z.AI",
     codex: "Codex",
     grok: "Grok",
@@ -154,7 +155,7 @@
         h("div", null,
           h("h1", { className: "text-xl font-semibold" }, "LLM Quota Monitor"),
           h("p", { className: "text-sm text-muted-foreground" },
-            "Z.AI, Codex, Grok, and OpenRouter remaining allowance")
+            "Z.AI, Codex, Grok, Nous Portal, and OpenRouter remaining allowance")
         ),
         h(C.Button, { variant: "outline", size: "sm", onClick: load }, "Refresh")
       ),

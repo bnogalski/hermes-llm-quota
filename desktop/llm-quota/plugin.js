@@ -16,6 +16,7 @@ import { jsx, jsxs } from 'react/jsx-runtime'
 const ID = 'llm-quota'
 const REFETCH_MS = 60_000
 const PROVIDERS = {
+  nous: { label: 'Nous Portal', icon: 'layers', chip: 'NOU' },
   zai: { label: 'Z.AI', icon: 'layers', chip: 'ZAI' },
   codex: { label: 'Codex', icon: 'layers', chip: 'CDX' },
   grok: { label: 'Grok', icon: 'layers', chip: 'GRK' },
@@ -287,7 +288,7 @@ function QuotaPane() {
 export default {
   id: ID,
   name: 'LLM Quota Monitor',
-  description: 'Live quota for Z.AI, Codex, Grok, and OpenRouter.',
+  description: 'Live quota for Z.AI, Codex, Grok, Nous Portal, and OpenRouter.',
   register(ctx) {
     _apiGet = function(path) {
       return ctx.rest(path)

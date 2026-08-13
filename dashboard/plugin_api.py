@@ -554,6 +554,175 @@ async def _fetch_codex_usage(client: httpx.AsyncClient) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
+# Nous Portal (Nous Research) credits
+# ---------------------------------------------------------------------------
+
+def _resolve_nous_access_token() -> str:
+    """Resolve a usable Nous Portal OAuth bearer (auto-refresh, like Grok)."""
+    try:
+        from hermes_cli.auth import resolve_nous_access_token
+
+        token = resolve_nous_access_token()
+        return str(token).strip() if token else ""
+    except ImportError:
+        return _resolve_store_token("nous", scan_all_profiles=not _profile_env_set())
+    except Exception:
+        return ""
+
+
+def _nous_portal_base_url() -> str:
+    """Return the portal base URL from auth state (fallback: default)."""
+    try:
+        from hermes_cli.auth import get_provider_auth_state
+
+        state = get_provider_auth_state("nous") or {}
+        url = state.get("portal_base_url")
+        return url.strip() if isinstance(url, str) and url.strip() else "https://portal.nousresearch.com"
+    except Exception:
+        return "https://portal.nousresearch.com"
+
+
+async def _fetch_nous_credits(client: httpx.AsyncClient) -> dict[str, Any]:
+    """Fetch Nous Portal credit balance and subscription state."""
+    access_token = await asyncio.to_thread(_resolve_nous_access_token)
+    if not access_token:
+        return {"provider": "nous", "status": "no_token"}
+
+    base = _nous_portal_base_url()
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Accept": "application/json",
+    }
+
+    windows: list[dict[str, Any]] = []
+    errors: list[str] = []
+    balance: float | None = None
+    total_credits: float | None = None
+    sub_credits: float | None = None
+    purch_credits: float | None = None
+    plan_label = "unknown"
+    tier_name: str | None = None
+
+    try:
+        billing_resp, account_resp = await asyncio.gather(
+            client.get(f"{base}/api/billing/state", headers=headers, timeout=10),
+            client.get(f"{base}/api/oauth/account", headers=headers, timeout=10),
+        )
+
+        if billing_resp.status_code == 401 or account_resp.status_code == 401:
+            return {"provider": "nous", "status": "expired"}
+        if billing_resp.status_code == 403 and account_resp.status_code == 403:
+            return {"provider": "nous", "status": "forbidden"}
+
+        # --- billing/state ---
+        if billing_resp.status_code == 200:
+            billing = billing_resp.json()
+            if isinstance(billing, dict):
+                balance = _number(billing.get("balanceUsd"))
+        else:
+            errors.append(f"billing/state HTTP {billing_resp.status_code}")
+
+        # --- oauth/account ---
+        if account_resp.status_code == 200:
+            account = account_resp.json()
+            if isinstance(account, dict):
+                total_credits = _number(account.get("total_usable_credits"))
+                sub_credits = _number(account.get("subscription_credits_remaining"))
+                purch_credits = _number(account.get("purchased_credits_remaining"))
+                has_sub = account.get("has_active_subscription")
+                sub_tier = account.get("subscription_tier")
+                paid_access = account.get("paid_service_access")
+                if isinstance(paid_access, dict):
+                    paid_access = paid_access.get("allowed")
+
+                # Resolve human-readable tier name
+                tiers_raw = account.get("tiers")
+                if has_sub and isinstance(tiers_raw, list):
+                    for t in tiers_raw:
+                        if isinstance(t, dict) and t.get("tier") == sub_tier:
+                            tier_name = t.get("name")
+                            break
+
+                plan_parts: list[str] = []
+                if tier_name:
+                    plan_parts.append(tier_name)
+                elif has_sub and sub_tier:
+                    plan_parts.append(f"tier {sub_tier}")
+                if paid_access:
+                    plan_parts.append("paid")
+                plan_label = ", ".join(plan_parts) if plan_parts else ("Subscription" if has_sub else "Free")
+        else:
+            errors.append(f"oauth/account HTTP {account_resp.status_code}")
+
+        # --- Build windows ---
+        # Primary: total usable credits (subscription + purchased combined)
+        if total_credits is not None and total_credits > 0:
+            # total_usable_credits is the remaining balance; we don't know the
+            # original grant, so show remaining with a flat bar
+            windows.append({
+                "type": "credits",
+                "label": "Credits",
+                "remaining": total_credits,
+                "limit": total_credits,
+                "used": 0,
+                "percentage_remaining": 100,
+                "percentage_used": 0,
+                "amount_unit": "USD",
+            })
+            # Show subscription vs purchased breakdown if both present
+            if sub_credits and sub_credits > 0:
+                windows.append({
+                    "type": "subscription_credits",
+                    "label": "  subscription",
+                    "remaining": sub_credits,
+                    "amount_unit": "USD",
+                })
+            if purch_credits and purch_credits > 0:
+                windows.append({
+                    "type": "purchased_credits",
+                    "label": "  purchased",
+                    "remaining": purch_credits,
+                    "amount_unit": "USD",
+                })
+        elif balance is not None and balance > 0:
+            # Fallback: purchased balance only
+            windows.append({
+                "type": "balance",
+                "label": "Balance",
+                "remaining": balance,
+                "limit": balance,
+                "used": 0,
+                "percentage_remaining": 100,
+                "percentage_used": 0,
+                "amount_unit": "USD",
+            })
+        else:
+            # No credits at all — show $0 so the user knows
+            windows.append({
+                "type": "balance",
+                "label": "Balance",
+                "remaining": 0,
+                "limit": 0,
+                "used": 0,
+                "percentage_remaining": 0,
+                "percentage_used": 100,
+                "amount_unit": "USD",
+            })
+
+        result: dict[str, Any] = {
+            "provider": "nous",
+            "status": "ok",
+            "plan": plan_label,
+            "windows": windows,
+        }
+        if errors:
+            result["partial"] = True
+        return result
+    except Exception as exc:
+        return {"provider": "nous", "status": "error", "message": _safe_error(exc)}
+
+
+# ---------------------------------------------------------------------------
 # OpenRouter credits
 # ---------------------------------------------------------------------------
 
@@ -610,6 +779,7 @@ async def get_all_quotas() -> dict[str, Any]:
             tasks.append(("zai", _no_key_result("zai")))
         tasks.append(("codex", _fetch_codex_usage(client)))
         tasks.append(("grok", _fetch_grok_usage(client)))
+        tasks.append(("nous", _fetch_nous_credits(client)))
         if or_key:
             tasks.append(("openrouter", _fetch_openrouter_credits(client, or_key)))
         else:
@@ -623,6 +793,11 @@ async def get_all_quotas() -> dict[str, Any]:
             provider_data[name] = {"provider": name, "status": "error", "message": _safe_error(result)}
         else:
             provider_data[name] = result
+
+    summary = ", ".join(
+        f"{n}={d.get('status', '?')}" for n, d in provider_data.items()
+    )
+    log.info("llm-quota /all response: %s", summary)
 
     return {
         "timestamp": time.time(),
